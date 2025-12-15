@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "nr-nexus"
+  },
+  "targets": {
+    "nr-nexus": {
+      "hosting": {
+        "nr-elec": [
+          "nr-elec"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

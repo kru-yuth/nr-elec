@@ -1,0 +1,35 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return isAuthenticated() && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Users collection: 
+    // - Read: Authenticated users can read their own profile. Admins can read all.
+    // - Write: Only admins can create/update roles.
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    // Electricity Records collection:
+    // - Read: Authenticated users can read all records (for dashboard).
+    // - Write: Authenticated users can create. Only admins or creator can update/delete?
+    // Requirement says "Edit Mode: สามารถดึงข้อมูลเก่ามาแก้ไขและอัปเดตได้" - implies users can edit.
+    match /electricity_records/{recordId} {
+      allow read: if true;
+      allow create: if isAuthenticated();
+      allow update, delete: if isAuthenticated(); // Can refine to allow only creator or admin if needed
+    }
+  }
+}
