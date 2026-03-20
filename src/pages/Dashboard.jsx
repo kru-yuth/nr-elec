@@ -84,7 +84,7 @@ export default function Dashboard() {
 
         setStats({
             latestCost,
-            latestMonthLabel: latestMonth ? `${new Date(0, latestMonth.month - 1).toLocaleString('default', { month: 'short' })} ${latestMonth.year}` : 'N/A',
+            latestMonthLabel: latestMonth ? `${new Date(0, latestMonth.month - 1).toLocaleString('th-TH', { month: 'short' })} ${latestMonth.year + 543}` : 'N/A',
             avgCost: totalCost / data.length,
             totalYearlyCost: totalCost,
             carbonFootprint: latestUsage * 0.4999,
@@ -102,7 +102,7 @@ export default function Dashboard() {
         // 3. Comparison Chart
         const months = Array.from({ length: 12 }, (_, i) => i + 1);
         const comparison = months.map(m => {
-            const row = { name: new Date(0, m - 1).toLocaleString('default', { month: 'short' }) };
+            const row = { name: new Date(0, m - 1).toLocaleString('th-TH', { month: 'short' }) };
             Object.keys(yearlyGroups).forEach(year => {
                 row[year] = data.filter(r => r.year === Number(year) && r.month === m)
                                 .reduce((acc, curr) => acc + (Number(curr.total_with_vat) || 0), 0);
@@ -118,7 +118,7 @@ export default function Dashboard() {
         data.forEach(r => {
             const key = `${r.year}-${String(r.month).padStart(2, '0')}`;
             if (!historyMap[key]) {
-                historyMap[key] = { sortKey: key, xLabel: `${new Date(0, r.month - 1).toLocaleString('default', { month: 'short' })} ${r.year}` };
+                historyMap[key] = { sortKey: key, xLabel: `${new Date(0, r.month - 1).toLocaleString('th-TH', { month: 'short' })} ${r.year + 543}` };
                 meters.forEach(m => historyMap[key][m] = 0);
             }
             historyMap[key][r.meter_code || 'Unknown'] += (Number(r.total_with_vat) || 0);
@@ -130,13 +130,22 @@ export default function Dashboard() {
         const filtered = records.filter(r => r.month === selectedMonth);
         const grouped = {};
         filtered.forEach(r => {
-            if (!grouped[r.year]) {
-                grouped[r.year] = { year: r.year };
-                uniqueMeters.forEach(m => grouped[r.year][m] = 0);
+            const yearBE = r.year + 543;
+            if (!grouped[yearBE]) {
+                grouped[yearBE] = { year: yearBE };
+                uniqueMeters.forEach(m => grouped[yearBE][m] = 0);
             }
-            grouped[r.year][r.meter_code || 'Unknown'] += (Number(r.total_with_vat) || 0);
+            grouped[yearBE][r.meter_code || 'Unknown'] += (Number(r.total_with_vat) || 0);
         });
         return Object.values(grouped).sort((a, b) => a.year - b.year);
+    };
+
+    // Helper for currency formatting
+    const formatCurrency = (val) => {
+        return (Number(val) || 0).toLocaleString('th-TH', { 
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+        });
     };
 
     if (loading) return <div className="p-12 text-center text-gray-500 font-medium">กำลังเตรียมข้อมูล...</div>;
@@ -172,15 +181,27 @@ export default function Dashboard() {
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div className="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex items-center gap-5">
-                    <div className="p-4 bg-primary-50 rounded-xl text-primary-600"><Zap size={32} /></div>
+                <div className={`p-6 rounded-2xl shadow-sm border transition-all duration-300 flex items-center gap-5 ${
+                    stats.momDiff === null ? 'bg-white border-gray-100' :
+                    stats.momDiff > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'
+                }`}>
+                    <div className={`p-4 rounded-xl ${
+                        stats.momDiff === null ? 'bg-primary-50 text-primary-600' :
+                        stats.momDiff > 0 ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'
+                    }`}><Zap size={32} /></div>
                     <div>
-                        <p className="text-sm font-medium text-gray-400">ค่าไฟล่าสุด ({stats.latestMonthLabel})</p>
-                        <p className="text-3xl font-bold text-gray-900">฿{stats.latestCost.toLocaleString()}</p>
+                        <p className={`text-sm font-medium mb-0.5 ${
+                            stats.momDiff === null ? 'text-gray-400' :
+                            stats.momDiff > 0 ? 'text-red-600' : 'text-green-600'
+                        }`}>ค่าไฟล่าสุด ({stats.latestMonthLabel})</p>
+                        <p className={`text-3xl font-bold ${
+                            stats.momDiff === null ? 'text-gray-900' :
+                            stats.momDiff > 0 ? 'text-red-900' : 'text-green-900'
+                        }`}>฿{formatCurrency(stats.latestCost)}</p>
                         {stats.momDiff !== null && (
-                            <div className={`flex items-center text-sm font-bold mt-1 ${stats.momDiff > 0 ? 'text-red-500' : 'text-green-500'}`}>
+                            <div className={`flex items-center text-sm font-bold mt-1 ${stats.momDiff > 0 ? 'text-red-600' : 'text-green-600'}`}>
                                 {stats.momDiff > 0 ? <ArrowUp size={16} /> : <ArrowDown size={16} />}
-                                {Math.abs(stats.momDiff).toFixed(1)}%
+                                {Math.abs(stats.momDiff).toFixed(2)}% {stats.momDiff > 0 ? 'เพิ่มขึ้น' : 'ลดลง'}
                             </div>
                         )}
                     </div>
@@ -190,7 +211,7 @@ export default function Dashboard() {
                     <div className="p-4 bg-teal-50 rounded-xl text-teal-600"><Leaf size={32} /></div>
                     <div>
                         <p className="text-sm font-medium text-gray-400">คาร์บอนฟุตปริ้นท์</p>
-                        <p className="text-3xl font-bold text-gray-900">{stats.carbonFootprint.toFixed(1)} <span className="text-sm font-normal text-gray-400">kgCO2e</span></p>
+                        <p className="text-3xl font-bold text-gray-900">{formatCurrency(stats.carbonFootprint)} <span className="text-sm font-normal text-gray-400">kgCO2e</span></p>
                     </div>
                 </div>
 
@@ -198,7 +219,7 @@ export default function Dashboard() {
                     <div className="p-4 bg-blue-50 rounded-xl text-blue-600"><DollarSign size={32} /></div>
                     <div>
                         <p className="text-sm font-medium text-gray-400">ค่าเฉลี่ยต่อบิล</p>
-                        <p className="text-3xl font-bold text-gray-900">฿{stats.avgCost.toFixed(0).toLocaleString()}</p>
+                        <p className="text-3xl font-bold text-gray-900">฿{formatCurrency(stats.avgCost)}</p>
                     </div>
                 </div>
             </div>
@@ -212,8 +233,8 @@ export default function Dashboard() {
                             <BarChart data={monthlyHistoryData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                                 <XAxis dataKey="xLabel" axisLine={false} tickLine={false} tick={{ fontSize: 12 }} />
-                                <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `฿${v}`} tick={{ fontSize: 12 }} />
-                                <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
+                                <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `฿${(v / 1000).toFixed(1)}k`} tick={{ fontSize: 12 }} />
+                                <Tooltip formatter={(v) => `฿${formatCurrency(v)}`} contentStyle={{ borderRadius: 12, border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} />
                                 <Legend verticalAlign="top" height={36} />
                                 {uniqueMeters.map((m, i) => (
                                     <Bar key={m} dataKey={m} name={m} stackId="a" fill={COLORS[i % COLORS.length]} radius={i === uniqueMeters.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0]} />
@@ -229,10 +250,10 @@ export default function Dashboard() {
                         <ResponsiveContainer>
                             <BarChart data={yearlyData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                                <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `฿${v / 1000}k`} />
-                                <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} />
-                                <Bar dataKey="cost" name="Total Cost" fill="#22c55e" radius={[4, 4, 0, 0]} barSize={50} />
+                                <XAxis dataKey="name" axisLine={false} tickLine={false} tickFormatter={(v) => `ปี ${Number(v) + 543}`} />
+                                <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `฿${(v / 1000).toFixed(0)}k`} />
+                                <Tooltip formatter={(v) => `฿${formatCurrency(v)}`} labelFormatter={(v) => `ปี พ.ศ. ${Number(v) + 543}`} />
+                                <Bar dataKey="cost" name="รวมค่าไฟ" fill="#22c55e" radius={[4, 4, 0, 0]} barSize={50} />
                             </BarChart>
                         </ResponsiveContainer>
                     </div>
@@ -245,11 +266,11 @@ export default function Dashboard() {
                             <LineChart data={monthlyComparisonData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                                <YAxis axisLine={false} tickLine={false} />
-                                <Tooltip formatter={(v) => `฿${v.toLocaleString()}`} />
-                                <Legend />
+                                <YAxis axisLine={false} tickLine={false} tickFormatter={(v) => `฿${(v/1000).toFixed(0)}k`} />
+                                <Tooltip formatter={(v) => `฿${formatCurrency(v)}`} />
+                                <Legend formatter={(v) => `ปี ${Number(v) + 543}`} />
                                 {yearlyData.map((y, i) => (
-                                    <Line key={y.name} type="monotone" dataKey={y.name} name={`ปี ${y.name}`} stroke={COLORS[i % COLORS.length]} strokeWidth={3} dot={{ r: 4 }} />
+                                    <Line key={y.name} type="monotone" dataKey={y.name} name={y.name} stroke={COLORS[i % COLORS.length]} strokeWidth={3} dot={{ r: 4 }} />
                                 ))}
                             </LineChart>
                         </ResponsiveContainer>
@@ -262,7 +283,7 @@ export default function Dashboard() {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-8 gap-4">
                     <h3 className="text-xl font-bold text-gray-800 flex items-center gap-2">
                         <Filter className="w-5 h-5 text-gray-500" />
-                        เจาะลึกเดือน: <span className="text-primary-600">{new Date(0, selectedMonth - 1).toLocaleString('default', { month: 'long' })}</span>
+                        เจาะลึกเดือน: <span className="text-primary-600">{new Date(0, selectedMonth - 1).toLocaleString('th-TH', { month: 'long' })}</span>
                     </h3>
                     <select
                         value={selectedMonth}
@@ -270,7 +291,7 @@ export default function Dashboard() {
                         className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-primary-500 focus:border-primary-500 block w-full sm:w-48 p-2.5 outline-none font-medium"
                     >
                         {Array.from({ length: 12 }, (_, i) => i + 1).map(m => (
-                            <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('default', { month: 'long' })}</option>
+                            <option key={m} value={m}>{new Date(0, m - 1).toLocaleString('th-TH', { month: 'long' })}</option>
                         ))}
                     </select>
                 </div>
@@ -280,9 +301,9 @@ export default function Dashboard() {
                         <ResponsiveContainer>
                             <BarChart data={getSpecificMonthData()} layout="vertical" margin={{ left: 20 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
-                                <XAxis type="number" axisLine={false} tickLine={false} tickFormatter={(v) => `฿${v}`} />
-                                <YAxis dataKey="year" type="category" axisLine={false} tickLine={false} width={60} style={{ fontWeight: 'bold' }} />
-                                <Tooltip cursor={{ fill: 'transparent' }} formatter={(v, n) => [`฿${v.toLocaleString()}`, `Meter: ${n}`]} />
+                                <XAxis type="number" axisLine={false} tickLine={false} tickFormatter={(v) => `฿${(v/1000).toFixed(0)}k`} />
+                                <YAxis dataKey="year" type="category" axisLine={false} tickLine={false} width={60} style={{ fontWeight: 'bold' }} tickFormatter={(v) => `${v}`} />
+                                <Tooltip cursor={{ fill: 'transparent' }} formatter={(v, n) => [`฿${formatCurrency(v)}`, `มิเตอร์: ${n}`]} labelFormatter={(v) => `ปี พ.ศ. ${v}`} />
                                 <Legend />
                                 {uniqueMeters.map((m, i) => (
                                     <Bar key={m} dataKey={m} name={m} stackId="a" fill={COLORS[i % COLORS.length]} barSize={32} />
