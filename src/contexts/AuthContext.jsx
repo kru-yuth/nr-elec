@@ -5,8 +5,9 @@ import {
     signOut,
     onAuthStateChanged
 } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteField } from 'firebase/firestore';
 import { auth, db } from '../firebase';
+import { normalizeRoles, userService } from '../services/userService';
 
 const AuthContext = createContext();
 
@@ -16,7 +17,7 @@ export function useAuth() {
 
 export function AuthProvider({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
-    const [userRole, setUserRole] = useState(null);
+    const [userRoles, setUserRoles] = useState([]);
     const [loading, setLoading] = useState(true);
 
     async function login() {
@@ -29,47 +30,56 @@ export function AuthProvider({ children }) {
             const result = await signInWithPopup(auth, provider);
             const user = result.user;
 
-            // Check if email domain is allowed (double check client side)
+            // Check if email domain is allowed
             if (!user.email.endsWith('@nr.ac.th')) {
                 await signOut(auth);
                 throw new Error("อนุญาตเฉพาะอีเมล @nr.ac.th เท่านั้น");
             }
 
-            // Check whitelist in Firestore
-            const userDocRef = doc(db, "users", user.uid); // Assuming UID is used, or query by email
-            // Note: The requirement says "UID/Email in Collection users". 
-            // Usually it's better to check by email if the users are pre-seeded without UIDs.
-            // But let's assume we check by UID first, if not found, maybe check by email?
-            // For strict whitelist, usually the admin adds the email and we query by email.
-            // However, to keep it simple and standard, let's assume the doc ID is the UID or we query.
-            // Let's try to get doc by UID first.
-
+            // 1. Try to find user by UID
+            const userDocRef = doc(db, "users", user.uid);
             let userDoc = await getDoc(userDocRef);
 
+            // 2. If not found by UID, try to find by Email (UID Linking)
             if (!userDoc.exists()) {
-                // If not found by UID, maybe we need to find by email and link?
-                // For this MVP, let's assume the user must exist. 
-                // Or maybe we just check if the email is in a whitelist collection?
-                // The requirement says: "User Whitelist (อนุญาตให้เข้าใช้งานเฉพาะ UID/Email ที่มีใน Collection users เท่านั้น)"
-                // Let's assume we query the 'users' collection where email == user.email
-                // But since we can't query easily without index, let's stick to a simple check or assume doc ID is UID.
-                // IF the admin adds users by Email, they won't know the UID beforehand.
-                // SO, the 'users' collection probably uses Email as ID or has an email field.
-                // Let's assume the doc ID is the EMAIL for simplicity in whitelist management, OR we query.
-                // Let's try to get doc by Email.
-                const emailDocRef = doc(db, "users", user.email);
-                const emailDoc = await getDoc(emailDocRef);
-
-                if (emailDoc.exists()) {
-                    userDoc = emailDoc;
+                const foundUser = await userService.findUserByEmail(user.email);
+                
+                if (foundUser) {
+                    // Link UID: Create/Update doc with UID as ID
+                    await setDoc(userDocRef, {
+                        ...foundUser,
+                        uid: user.uid,
+                        roles: normalizeRoles(foundUser),
+                        role: deleteField(),
+                        Role: deleteField()
+                    }, { merge: true });
+                    
+                    userDoc = await getDoc(userDocRef);
                 } else {
-                    // If neither UID nor Email doc exists
-                    await signOut(auth);
-                    throw new Error("ผู้ใช้งานไม่มีสิทธิ์เข้าถึงระบบ กรุณาติดต่อผู้ดูแลระบบ");
+                    // Check for email as doc ID (Legacy fallback)
+                    const emailDocRef = doc(db, "users", user.email);
+                    const emailDoc = await getDoc(emailDocRef);
+                    
+                    if (emailDoc.exists()) {
+                        const legacyData = emailDoc.data();
+                        await setDoc(userDocRef, {
+                            ...legacyData,
+                            email: user.email,
+                            uid: user.uid,
+                            roles: normalizeRoles(legacyData),
+                            role: deleteField(),
+                            Role: deleteField()
+                        });
+                        userDoc = await getDoc(userDocRef);
+                    } else {
+                        await signOut(auth);
+                        throw new Error("ผู้ใช้งานไม่มีสิทธิ์เข้าถึงระบบ กรุณาติดต่อผู้ดูแลระบบ");
+                    }
                 }
             }
 
-            setUserRole(userDoc.data().role || 'user');
+            const userData = userDoc.data();
+            setUserRoles(normalizeRoles(userData));
             return user;
         } catch (error) {
             console.error("Login Error:", error);
@@ -83,47 +93,35 @@ export function AuthProvider({ children }) {
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                if (!user.email.endsWith('@nr.ac.th')) {
-                    await signOut(auth);
-                    setCurrentUser(null);
-                    setUserRole(null);
-                    setLoading(false);
-                    return;
-                }
-
-                // Fetch role again to be sure
+            if (user && user.email.endsWith('@nr.ac.th')) {
                 try {
-                    // Logic to find user doc again
-                    let role = 'user';
                     const userDocRef = doc(db, "users", user.uid);
-                    let userDoc = await getDoc(userDocRef);
-                    if (!userDoc.exists()) {
-                        const emailDocRef = doc(db, "users", user.email);
-                        const emailDoc = await getDoc(emailDocRef);
-                        if (emailDoc.exists()) {
-                            userDoc = emailDoc;
-                        }
-                    }
-
+                    const userDoc = await getDoc(userDocRef);
+                    
                     if (userDoc.exists()) {
-                        role = userDoc.data().role || 'user';
+                        const data = userDoc.data();
                         setCurrentUser(user);
-                        setUserRole(role);
+                        setUserRoles(normalizeRoles(data));
                     } else {
-                        // Not in whitelist
-                        await signOut(auth);
-                        setCurrentUser(null);
-                        setUserRole(null);
+                        // Check email linking if UID doc not yet created
+                        const foundUser = await userService.findUserByEmail(user.email);
+                        if (foundUser) {
+                             setCurrentUser(user);
+                             setUserRoles(normalizeRoles(foundUser));
+                        } else {
+                            await signOut(auth);
+                            setCurrentUser(null);
+                            setUserRoles([]);
+                        }
                     }
                 } catch (e) {
                     console.error("Auth State Change Error", e);
                     setCurrentUser(null);
-                    setUserRole(null);
+                    setUserRoles([]);
                 }
             } else {
                 setCurrentUser(null);
-                setUserRole(null);
+                setUserRoles([]);
             }
             setLoading(false);
         });
@@ -133,7 +131,9 @@ export function AuthProvider({ children }) {
 
     const value = {
         currentUser,
-        userRole,
+        roles: userRoles,
+        role: userRoles.length > 0 ? userRoles[0] : null, // Fallback for old UI
+        userRole: userRoles.length > 0 ? userRoles[0] : null, // Second fallback
         login,
         logout,
         loading
