@@ -2,22 +2,61 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // 1. Electricity Records: PUBLIC READ
-    match /electricity_records/{document=**} {
-      allow read: if true;
-      allow write: if request.auth != null;
+    // Helper function to check roles in the 'users' collection
+    function hasRole(role) {
+      return request.auth != null && 
+             role in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles;
     }
 
-    // 2. Users: OWNER OR ADMIN
+    // Helper to check if the user is active
+    function isActive() {
+      return request.auth != null && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
+
+    // Users Collection
     match /users/{userId} {
-      allow read: if request.auth != null && (
+      // Allow reading your own document or if you are an admin
+      allow read: if request.auth != null && (request.auth.uid == userId || hasRole('admin'));
+      
+      // Allow initial UID linking: If email matches and document exists
+      // This is for the setDoc(doc(db, "users", uid), ...) part
+      allow create, update: if request.auth != null && (
         request.auth.uid == userId || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         'admin' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles)
+        hasRole('admin') ||
+        (request.resource.data.email == request.auth.token.email && 
+         (!exists(/databases/$(database)/documents/users/$(userId)) || 
+          get(/databases/$(database)/documents/users/$(userId)).data.email == request.auth.token.email))
       );
-      allow write: if request.auth != null && 
-        exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-        'admin' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles;
+      
+      allow delete: if hasRole('admin');
+    }
+
+    // NR-Nexus: Volunteer Jobs
+    match /volunteer_jobs/{jobId} {
+      allow read: if request.auth != null;
+      allow write: if hasRole('admin') || hasRole('teacher');
+    }
+
+    // NR-Electricity-Stats: Electricity Records
+    match /electricity_records/{recordId} {
+      allow read: if true; // Dashboard is public
+      allow create: if request.auth != null && isActive();
+      allow update, delete: if hasRole('admin') || 
+                            (resource.data.created_by == request.auth.uid);
+    }
+
+    // Waste-Management-System: Waste Records
+    match /waste_records/{recordId} {
+      allow read: if true; // Dashboard is public
+      allow create: if request.auth != null && isActive();
+      allow update, delete: if hasRole('admin') || 
+                            (resource.data.created_by == request.auth.uid);
+    }
+
+    // Global default: deny all
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
