@@ -37,10 +37,10 @@ export default function UserManagement() {
         }
 
         try {
-            await userService.updateUserRoles(uid, newRoles);
+            await userService.updateUser(uid, { roles: newRoles });
             // Optimistic update
             setUsers(users.map(u =>
-                u.id === uid ? { ...u, roles: newRoles, role: newRoles[0] } : u
+                u.id === uid ? { ...u, roles: newRoles } : u
             ));
             toast.success("อัปเดตสิทธิ์สำเร็จ");
         } catch (error) {

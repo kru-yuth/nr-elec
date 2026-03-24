@@ -143,5 +143,13 @@ service cloud.firestore {
 firebase deploy --only firestore:rules --project nr-nexus
 ```
 
+## 9. ข้อควรระวัง (Precautions) ⚠️
+
+1. **ระบบ Whitelist ที่เข้มงวด:** ผู้ใช้งานต้องมีชื่ออยู่ในคอลเลกชัน `users` ใน Firestore ก่อนเท่านั้นจึงจะเข้าสู่ระบบได้ หากลบข้อมูลใน Firestore ออก ผู้ใช้นั้นจะถูก Force Logout ทันทีที่ระบบตรวจพบ
+2. **การจัดการสิทธิ์ (Roles):** ระบบเปลี่ยนไปใช้รูปแบบ Array (`roles`) ทั้งหมดแล้ว ห้ามใช้การเช็คสิทธิ์แบบเดิม (`role === 'admin'`) ให้ใช้ `roles.includes('admin')` แทนเพื่อรองรับผู้ใช้งานที่มีหลายสิทธิ์
+3. **การแก้ไขข้อมูลผ่าน Console:** หากมีการแก้ไขฟิลด์ `email` ใน Firestore จะต้องมั่นใจว่าตรงกับ Google Account ของผู้ใช้ มิฉะนั้นการทำ UID Linking จะล้มเหลว
+4. **ความปลอดภัยของ Rules:** การ Deploy Firestore Rules จะต้องทำจากไฟล์ `firestore.rules` ที่รวมกฎของทุกโปรเจกต์ (NR-Nexus, NR-Elec, Waste) ไว้ด้วยกันเท่านั้น การ Deploy กฎแยกส่วนอาจทำให้โปรเจกต์อื่นใช้งานไม่ได้
+5. **สถานะผู้ใช้งาน:** หากสถานะผู้ใช้ไม่ใช่ `active` (เช่น `alumni` หรือ `inactive`) ระบบอาจจำกัดสิทธิ์ในการเขียนข้อมูลตามที่ระบุไว้ใน Security Rules
+
 ---
-*เอกสารฉบับนี้อัปเดตล่าสุดเมื่อ: 19 มีนาคม 2026 (Refactored to Unified User System)*
+*เอกสารฉบับนี้อัปเดตล่าสุดเมื่อ: 24 มีนาคม 2026 (Added Precautions & Unified Auth Updates)*

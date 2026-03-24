@@ -19,12 +19,14 @@ export function AuthProvider({ children }) {
     const [currentUser, setCurrentUser] = useState(null);
     const [userRoles, setUserRoles] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [authError, setAuthError] = useState(null);
 
     async function login() {
         const provider = new GoogleAuthProvider();
         provider.setCustomParameters({
             hd: "nr.ac.th"
         });
+        setAuthError(null);
 
         try {
             const result = await signInWithPopup(auth, provider);
@@ -33,61 +35,37 @@ export function AuthProvider({ children }) {
             // Check if email domain is allowed
             if (!user.email.endsWith('@nr.ac.th')) {
                 await signOut(auth);
-                throw new Error("อนุญาตเฉพาะอีเมล @nr.ac.th เท่านั้น");
+                const err = new Error("อนุญาตเฉพาะอีเมล @nr.ac.th เท่านั้น");
+                setAuthError(err.message);
+                throw err;
             }
 
-            // 1. Try to find user by UID
-            const userDocRef = doc(db, "users", user.uid);
-            let userDoc = await getDoc(userDocRef);
-
-            // 2. If not found by UID, try to find by Email (UID Linking)
-            if (!userDoc.exists()) {
-                const foundUser = await userService.findUserByEmail(user.email);
+            // Strict Email-based Lookup (Unified Flow)
+            const foundUser = await userService.findUserByEmail(user.email);
+            
+            if (foundUser) {
+                // Link UID if missing or update existing UID doc
+                await userService.linkUidToEmailDoc(user.email, user.uid, foundUser);
                 
-                if (foundUser) {
-                    // Link UID: Create/Update doc with UID as ID
-                    await setDoc(userDocRef, {
-                        ...foundUser,
-                        uid: user.uid,
-                        roles: normalizeRoles(foundUser),
-                        role: deleteField(),
-                        Role: deleteField()
-                    }, { merge: true });
-                    
-                    userDoc = await getDoc(userDocRef);
-                } else {
-                    // Check for email as doc ID (Legacy fallback)
-                    const emailDocRef = doc(db, "users", user.email);
-                    const emailDoc = await getDoc(emailDocRef);
-                    
-                    if (emailDoc.exists()) {
-                        const legacyData = emailDoc.data();
-                        await setDoc(userDocRef, {
-                            ...legacyData,
-                            email: user.email,
-                            uid: user.uid,
-                            roles: normalizeRoles(legacyData),
-                            role: deleteField(),
-                            Role: deleteField()
-                        });
-                        userDoc = await getDoc(userDocRef);
-                    } else {
-                        await signOut(auth);
-                        throw new Error("ผู้ใช้งานไม่มีสิทธิ์เข้าถึงระบบ กรุณาติดต่อผู้ดูแลระบบ");
-                    }
-                }
+                const updatedProfile = await userService.getUserProfile(user.uid);
+                setUserRoles(updatedProfile.roles);
+                setCurrentUser(user);
+                return user;
+            } else {
+                await signOut(auth);
+                const err = new Error("ไม่พบข้อมูลผู้ใช้งานในระบบ กรุณาติดต่อผู้ดูแลระบบ");
+                setAuthError(err.message);
+                throw err;
             }
-
-            const userData = userDoc.data();
-            setUserRoles(normalizeRoles(userData));
-            return user;
         } catch (error) {
             console.error("Login Error:", error);
+            if (!authError) setAuthError(error.message);
             throw error;
         }
     }
 
     function logout() {
+        setAuthError(null);
         return signOut(auth);
     }
 
@@ -95,19 +73,19 @@ export function AuthProvider({ children }) {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             if (user && user.email.endsWith('@nr.ac.th')) {
                 try {
-                    const userDocRef = doc(db, "users", user.uid);
-                    const userDoc = await getDoc(userDocRef);
+                    const profile = await userService.getUserProfile(user.uid);
                     
-                    if (userDoc.exists()) {
-                        const data = userDoc.data();
+                    if (profile && profile.roles && profile.roles.length > 0) {
                         setCurrentUser(user);
-                        setUserRoles(normalizeRoles(data));
+                        setUserRoles(profile.roles);
                     } else {
                         // Check email linking if UID doc not yet created
                         const foundUser = await userService.findUserByEmail(user.email);
                         if (foundUser) {
+                             await userService.linkUidToEmailDoc(user.email, user.uid, foundUser);
+                             const updatedProfile = await userService.getUserProfile(user.uid);
                              setCurrentUser(user);
-                             setUserRoles(normalizeRoles(foundUser));
+                             setUserRoles(updatedProfile.roles);
                         } else {
                             await signOut(auth);
                             setCurrentUser(null);
@@ -116,8 +94,12 @@ export function AuthProvider({ children }) {
                     }
                 } catch (e) {
                     console.error("Auth State Change Error", e);
-                    setCurrentUser(null);
-                    setUserRoles([]);
+                    if (e.code === 'permission-denied') {
+                        setAuthError("Permission Denied: Unable to fetch user profile.");
+                    } else {
+                        setCurrentUser(null);
+                        setUserRoles([]);
+                    }
                 }
             } else {
                 setCurrentUser(null);
@@ -132,8 +114,9 @@ export function AuthProvider({ children }) {
     const value = {
         currentUser,
         roles: userRoles,
-        role: userRoles.length > 0 ? userRoles[0] : null, // Fallback for old UI
-        userRole: userRoles.length > 0 ? userRoles[0] : null, // Second fallback
+        role: userRoles[0] || null, 
+        userRole: userRoles[0] || null, 
+        authError,
         login,
         logout,
         loading

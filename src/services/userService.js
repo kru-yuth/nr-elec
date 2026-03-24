@@ -20,21 +20,21 @@ const COLLECTION_NAME = 'users';
  * @returns {Array} - Cleaned array of roles
  */
 export const normalizeRoles = (userData) => {
-    if (!userData) return ['user'];
+    if (!userData) return [];
     
     const rolesSet = new Set();
     
     // Add existing roles array if present
     if (Array.isArray(userData.roles)) {
-        userData.roles.forEach(r => rolesSet.add(String(r).toLowerCase()));
+        userData.roles.forEach(r => rolesSet.add(String(r).toLowerCase().trim()));
     }
     
     // Add legacy role/Role fields
-    if (userData.role) rolesSet.add(String(userData.role).toLowerCase());
-    if (userData.Role) rolesSet.add(String(userData.Role).toLowerCase());
+    if (userData.role) rolesSet.add(String(userData.role).toLowerCase().trim());
+    if (userData.Role) rolesSet.add(String(userData.Role).toLowerCase().trim());
     
     const finalRoles = Array.from(rolesSet).filter(Boolean);
-    return finalRoles.length > 0 ? finalRoles : ['user'];
+    return finalRoles;
 };
 
 export const userService = {
@@ -46,30 +46,28 @@ export const userService = {
             return {
                 id: docSnap.id,
                 ...data,
-                roles: normalizeRoles(data)
+                roles: normalizeRoles(data),
+                status: data.status || 'active'
             };
         });
     },
 
-    // Update user roles (Unified)
-    updateUserRoles: async (uid, newRoles) => {
+    // Update user roles and status (Unified)
+    updateUser: async (uid, updates) => {
         const userRef = doc(db, COLLECTION_NAME, uid);
         
-        // Ensure newRoles is an array of lowercase strings
-        const cleanedRoles = Array.isArray(newRoles) 
-            ? [...new Set(newRoles.map(r => String(r).toLowerCase()))]
-            : [String(newRoles).toLowerCase()];
+        const finalUpdates = { ...updates, updatedAt: new Date().toISOString() };
+        
+        if (updates.roles) {
+            finalUpdates.roles = Array.isArray(updates.roles) 
+                ? [...new Set(updates.roles.map(r => String(r).toLowerCase().trim()))]
+                : [String(updates.roles).toLowerCase().trim()];
+            
+            finalUpdates.role = deleteField(); // Clean up legacy field
+            finalUpdates.Role = deleteField(); // Clean up legacy field
+        }
 
-        await updateDoc(userRef, {
-            roles: cleanedRoles,
-            role: deleteField(), // Clean up legacy field
-            Role: deleteField()  // Clean up legacy field
-        });
-    },
-
-    // Backward compatibility wrapper
-    updateUserRole: async (uid, newRole) => {
-        return userService.updateUserRoles(uid, [newRole]);
+        await updateDoc(userRef, finalUpdates);
     },
 
     // Get user profile with normalization
@@ -81,13 +79,14 @@ export const userService = {
             return { 
                 id: docSnap.id, 
                 ...data, 
-                roles: normalizeRoles(data) 
+                roles: normalizeRoles(data),
+                status: data.status || 'active'
             };
         }
         return null;
     },
 
-    // Find user by email (for UID Linking)
+    // Find user by email (for UID Linking) - Uses Query as requested
     findUserByEmail: async (email) => {
         const q = query(
             collection(db, COLLECTION_NAME),
@@ -105,22 +104,20 @@ export const userService = {
     // Link UID to existing email document
     linkUidToEmailDoc: async (email, uid, userData) => {
         const roles = normalizeRoles(userData);
-        // Create/Update document with UID as ID, and delete the email-based ID if they differ
-        const newUserRef = doc(db, COLLECTION_NAME, uid);
+        const userRef = doc(db, COLLECTION_NAME, uid);
         
-        await setDoc(newUserRef, {
+        await setDoc(userRef, {
             ...userData,
+            email: email, // Ensure email is set
             uid: uid,
             roles: roles,
+            status: userData.status || 'active',
             role: deleteField(),
-            Role: deleteField()
+            Role: deleteField(),
+            updatedAt: new Date().toISOString()
         }, { merge: true });
 
         // If the old doc ID was the email, we might want to delete it or leave it.
-        // Usually, we transition to UID as the primary key.
-        if (email !== uid) {
-            // Optional: delete old email-based doc if needed, 
-            // but for safety in this refactor, we'll keep it or assume UID linking is preferred.
-        }
+        // For this refactor, we transition to UID as primary key.
     }
 };

@@ -4,7 +4,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { LayoutDashboard, PlusCircle, Users, LogOut, Menu, X, Upload, LogIn } from 'lucide-react';
 
 export default function Layout() {
-    const { currentUser, userRole, logout } = useAuth();
+    const { currentUser, roles, logout } = useAuth();
+    const isAdmin = roles.includes('admin');
     const navigate = useNavigate();
     const location = useLocation();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
@@ -47,7 +48,7 @@ export default function Layout() {
                                         บันทึกข้อมูล
                                     </Link>
                                 )}
-                                {userRole === 'admin' && (
+                                {isAdmin && (
                                     <>
                                         <Link
                                             to="/users"
@@ -120,7 +121,7 @@ export default function Layout() {
                                     บันทึกข้อมูล
                                 </Link>
                             )}
-                            {userRole === 'admin' && (
+                            {isAdmin && (
                                 <Link
                                     to="/users"
                                     onClick={() => setIsMobileMenuOpen(false)}
@@ -129,7 +130,7 @@ export default function Layout() {
                                     จัดการผู้ใช้
                                 </Link>
                             )}
-                            {userRole === 'admin' && (
+                            {isAdmin && (
                                 <Link
                                     to="/import"
                                     onClick={() => setIsMobileMenuOpen(false)}
