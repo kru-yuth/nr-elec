@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { electricityService } from '../services/electricityService';
 import { Upload, FileText, AlertTriangle, CheckCircle, XCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { CARBON_EMISSION_FACTOR } from '../utils/constants';
 
 const REQUIRED_HEADERS = ['user_number', 'month', 'year', 'electricity_usage', 'total_with_vat'];
 
@@ -45,15 +46,19 @@ export default function BulkImport() {
                 }
 
                 // Transform and clean data
-                const cleanData = results.data.map(row => ({
-                    user_number: row.user_number?.toString().trim(),
-                    meter_code: row.meter_code?.toString().trim() || '', // Optional in CSV if we auto-map later, but better if provided or we map logic here
-                    month: Number(row.month),
-                    year: Number(row.year),
-                    electricity_usage: Number(row.electricity_usage),
-                    total_with_vat: Number(row.total_with_vat),
-                    ft_rate: row.ft_rate ? Number(row.ft_rate) : 0
-                })).filter(row => row.user_number && !isNaN(row.month)); // Basic filter
+                const cleanData = results.data.map(row => {
+                    const usage = Number(row.electricity_usage);
+                    return {
+                        user_number: row.user_number?.toString().trim(),
+                        meter_code: row.meter_code?.toString().trim() || '',
+                        month: Number(row.month),
+                        year: Number(row.year),
+                        electricity_usage: usage,
+                        total_with_vat: Number(row.total_with_vat),
+                        ft_rate: row.ft_rate ? Number(row.ft_rate) : 0,
+                        carbon_emissions: usage * CARBON_EMISSION_FACTOR
+                    };
+                }).filter(row => row.user_number && !isNaN(row.month));
 
                 setPreviewData(cleanData);
             },
@@ -169,8 +174,9 @@ export default function BulkImport() {
                                     <tr>
                                         <th className="px-4 py-2 text-left">หมายเลขผู้ใช้</th>
                                         <th className="px-4 py-2 text-left">เดือน/ปี</th>
-                                        <th className="px-4 py-2 text-right">จำนวนหน่วย</th>
-                                        <th className="px-4 py-2 text-right">ยอดเงิน</th>
+                                        <th className="px-4 py-2 text-right">จำนวนหน่วย (kWh)</th>
+                                        <th className="px-4 py-2 text-right">คาร์บอน (kgCO2e)</th>
+                                        <th className="px-4 py-2 text-right">ยอดเงิน (บาท)</th>
                                     </tr>
                                 </thead>
                                 <tbody className="bg-white divide-y divide-gray-200">
@@ -179,12 +185,13 @@ export default function BulkImport() {
                                             <td className="px-4 py-2">{row.user_number}</td>
                                             <td className="px-4 py-2">{row.month}/{row.year}</td>
                                             <td className="px-4 py-2 text-right">{row.electricity_usage}</td>
+                                            <td className="px-4 py-2 text-right text-emerald-600 font-medium">{(row.carbon_emissions || 0).toFixed(2)}</td>
                                             <td className="px-4 py-2 text-right">{row.total_with_vat}</td>
                                         </tr>
                                     ))}
                                     {previewData.length > 10 && (
                                         <tr>
-                                            <td colSpan="4" className="px-4 py-2 text-center text-gray-500">
+                                            <td colSpan="5" className="px-4 py-2 text-center text-gray-500">
                                                 ...and {previewData.length - 10} more rows...
                                             </td>
                                         </tr>

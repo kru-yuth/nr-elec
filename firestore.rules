@@ -4,8 +4,14 @@ service cloud.firestore {
     
     // Helper function to check roles in the 'users' collection
     function hasRole(role) {
-      return request.auth != null && 
-             role in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles;
+      return request.auth != null && (
+        ('roles' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+         role in get(/databases/$(database)/documents/users/$(request.auth.uid)).data.roles) ||
+        ('role' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == role) ||
+        ('Role' in get(/databases/$(database)/documents/users/$(request.auth.uid)).data &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.Role == role)
+      );
     }
 
     // Helper to check if the user is active

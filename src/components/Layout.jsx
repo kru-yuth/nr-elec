@@ -1,7 +1,7 @@
 import React from 'react';
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { LayoutDashboard, PlusCircle, Users, LogOut, Menu, X, Upload, LogIn } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Users, LogOut, Menu, X, Upload, LogIn, Home } from 'lucide-react';
 
 export default function Layout() {
     const { currentUser, roles, logout } = useAuth();
@@ -28,6 +28,16 @@ export default function Layout() {
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
                     <div className="flex justify-between h-16">
                         <div className="flex">
+                            <div className="flex-shrink-0 flex items-center pr-4 border-r border-gray-100 mr-4">
+                                <a 
+                                    href="http://localhost:5173" 
+                                    className="flex items-center gap-2 text-green-600 hover:text-green-700 transition font-bold"
+                                    title="Back to NR Nexus"
+                                >
+                                    <Home className="w-5 h-5" />
+                                    <span className="hidden lg:block">Nexus</span>
+                                </a>
+                            </div>
                             <div className="flex-shrink-0 flex items-center">
                                 <span className="text-xl font-bold text-primary-600">NR Electricity</span>
                             </div>

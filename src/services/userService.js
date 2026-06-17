@@ -59,12 +59,16 @@ export const userService = {
         const finalUpdates = { ...updates, updatedAt: new Date().toISOString() };
         
         if (updates.roles) {
-            finalUpdates.roles = Array.isArray(updates.roles) 
+            const cleanRoles = Array.isArray(updates.roles) 
                 ? [...new Set(updates.roles.map(r => String(r).toLowerCase().trim()))]
                 : [String(updates.roles).toLowerCase().trim()];
             
-            finalUpdates.role = deleteField(); // Clean up legacy field
-            finalUpdates.Role = deleteField(); // Clean up legacy field
+            finalUpdates.roles = cleanRoles;
+            // Keep legacy fields updated for backward compatibility instead of deleting
+            if (cleanRoles.length > 0) {
+                finalUpdates.role = cleanRoles[0];
+                finalUpdates.Role = cleanRoles[0];
+            }
         }
 
         await updateDoc(userRef, finalUpdates);
@@ -112,8 +116,8 @@ export const userService = {
             uid: uid,
             roles: roles,
             status: userData.status || 'active',
-            role: deleteField(),
-            Role: deleteField(),
+            role: roles.length > 0 ? roles[0] : 'student',
+            Role: roles.length > 0 ? roles[0] : 'student',
             updatedAt: new Date().toISOString()
         }, { merge: true });
 

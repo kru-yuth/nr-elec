@@ -2,8 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { electricityService } from '../services/electricityService';
 import { useAuth } from '../contexts/AuthContext';
-import { Save, Search, Edit3, PlusCircle, AlertCircle } from 'lucide-react';
+import { Save, Search, Edit3, PlusCircle, AlertCircle, Leaf } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { CARBON_EMISSION_FACTOR, TREE_ABSORPTION_FACTOR_MONTH } from '../utils/constants';
 
 // In a real app, this might come from a DB or config
 const METER_MAPPING = {
@@ -117,7 +118,8 @@ export default function DataEntry() {
                 year: Number(formData.year),
                 electricity_usage: Number(formData.electricity_usage),
                 total_with_vat: Number(formData.total_with_vat),
-                ft_rate: formData.ft_rate ? Number(formData.ft_rate) : 0
+                ft_rate: formData.ft_rate ? Number(formData.ft_rate) : 0,
+                carbon_emissions: Number(formData.electricity_usage) * CARBON_EMISSION_FACTOR
             };
 
             if (isEditMode && editingId) {
@@ -249,7 +251,7 @@ export default function DataEntry() {
 
                 {/* Row 3: Data Inputs */}
                 <div className="space-y-4">
-                    <div>
+                    <div className="space-y-3">
                         <label className="block text-sm font-medium text-gray-700 mb-1">จำนวนหน่วยที่ใช้ (kWh)</label>
                         <input
                             type="number"
@@ -261,6 +263,28 @@ export default function DataEntry() {
                             step="0.01"
                             required
                         />
+
+                        {formData.electricity_usage && Number(formData.electricity_usage) > 0 && (
+                            <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+                                <div className="flex items-center gap-3">
+                                    <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
+                                        <Leaf className="w-5 h-5 animate-pulse" />
+                                    </div>
+                                    <div>
+                                        <p className="text-xs text-emerald-700 font-medium">คาดการณ์การปล่อยคาร์บอน (Carbon Footprint)</p>
+                                        <p className="text-lg font-bold text-emerald-950">
+                                            {(Number(formData.electricity_usage) * CARBON_EMISSION_FACTOR).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kgCO2e
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="sm:text-right">
+                                    <p className="text-xs text-emerald-700 font-medium">เทียบเท่าการปลูกต้นไม้ชดเชย</p>
+                                    <p className="text-sm font-bold text-emerald-900">
+                                        ~{(Number(formData.electricity_usage) * CARBON_EMISSION_FACTOR / TREE_ABSORPTION_FACTOR_MONTH).toLocaleString('th-TH', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} ต้น/เดือน
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     <div>
